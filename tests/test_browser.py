@@ -1,6 +1,7 @@
 """Сквозные тесты с настоящим браузером (Chromium) на демо-магазине."""
 
 import socket
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -70,6 +71,19 @@ def test_full_run_and_resume(site, tmp_path):
     # Повторный запуск: всё готово, браузер даже ничего не ищет
     again = run(site, source, out, state, DEMO_LOGIN, DEMO_PASSWORD)
     assert (again.skipped, again.ok) == (4, 0)
+
+
+def test_input_columns_copied_to_result(site, tmp_path):
+    wb = Workbook()
+    wb.active.append(["Название в прайсе", "Артикул"])
+    wb.active.append(["Дрель из прайса Berger", "BG1001"])
+    source = tmp_path / "prices.xlsx"
+    wb.save(source)
+    cfg = replace(site, input_keep=["Название в прайсе"])
+    run(cfg, source, tmp_path / "out.xlsx", tmp_path / "s.json", DEMO_LOGIN, DEMO_PASSWORD)
+    row = rows(tmp_path / "out.xlsx")["BG1001"]
+    assert row[1] == "Дрель из прайса Berger"       # колонка из входного файла
+    assert row[2] == "Дрель-шуруповёрт Berger 18 В"  # название с сайта
 
 
 def test_saved_session_works_without_password(site, tmp_path):

@@ -5,7 +5,7 @@ from decimal import Decimal
 import pytest
 from openpyxl import Workbook, load_workbook
 
-from cabinet_parser.excel_io import ExcelError, ResultWriter, read_skus
+from cabinet_parser.excel_io import ExcelError, ResultWriter, read_rows, read_skus
 
 
 def make_input(tmp_path, rows, header="Артикул"):
@@ -22,6 +22,23 @@ def make_input(tmp_path, rows, header="Артикул"):
 def test_read_skus_cleans_and_dedupes(tmp_path):
     path = make_input(tmp_path, ["BG1001", " BG1002 ", None, "BG1001", 12345, 777.0])
     assert read_skus(path, "Артикул") == ["BG1001", "BG1002", "12345", "777"]
+
+
+def test_read_rows_keeps_extra_columns(tmp_path):
+    path = make_input(tmp_path, ["BG1001", "BG1002"])
+    rows = read_rows(path, "Артикул", keep=["Название"])
+    assert rows == [("BG1001", {"Название": "товар"}), ("BG1002", {"Название": "товар"})]
+
+
+def test_writer_with_input_columns(tmp_path):
+    out = tmp_path / "out.xlsx"
+    writer = ResultWriter(out, [("price", "Цена")], input_columns=["Название"])
+    writer.add("BG1001", {"price": Decimal("10")}, "ok", "u", extra={"Название": "Дрель"})
+    writer.save()
+    ws = load_workbook(out).active
+    assert [c.value for c in ws[1]][:3] == ["Артикул", "Название", "Цена"]
+    assert [c.value for c in ws[2]][:3] == ["BG1001", "Дрель", 10]
+    assert ResultWriter(out, [("price", "Цена")], input_columns=["Название"]).done == {"BG1001"}
 
 
 def test_column_not_found(tmp_path):

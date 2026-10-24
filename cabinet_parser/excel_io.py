@@ -29,6 +29,12 @@ def _sku_str(value) -> str:
 
 def read_skus(path: Path, column: str, sheet: str | None = None) -> list[str]:
     """Читает артикулы из колонки с заголовком column. Пустые и повторы убирает."""
+    return [sku for sku, _ in read_rows(path, column, sheet)]
+
+
+def read_rows(path: Path, column: str, sheet: str | None = None,
+              keep: list[str] | None = None) -> list[tuple[str, dict]]:
+    """Артикулы и значения колонок keep из той же строки (например, «Название» из прайса)."""
     try:
         wb = load_workbook(path, read_only=True, data_only=True)
     except FileNotFoundError as error:
@@ -36,14 +42,19 @@ def read_skus(path: Path, column: str, sheet: str | None = None) -> list[str]:
     ws = wb[sheet] if sheet else wb.active
 
     rows = ws.iter_rows(values_only=True)
-    header = next(rows, ())
-    try:
-        index = [_norm(cell) for cell in header].index(_norm(column))
-    except ValueError:
-        raise ExcelError(f"В первой строке нет колонки «{column}». Есть: "
-                         + ", ".join(str(c) for c in header if c)) from None
+    header = [_norm(cell) for cell in next(rows, ())]
 
-    skus, seen = [], set()
+    def find(name: str) -> int:
+        try:
+            return header.index(_norm(name))
+        except ValueError:
+            raise ExcelError(f"В первой строке нет колонки «{name}». Есть: "
+                             + ", ".join(h for h in header if h)) from None
+
+    index = find(column)
+    keep_index = {name: find(name) for name in keep or []}
+
+    result, seen = [], set()
     for row in rows:
         value = row[index] if index < len(row) else None
         if value is None or str(value).strip() == "":
@@ -51,28 +62,30 @@ def read_skus(path: Path, column: str, sheet: str | None = None) -> list[str]:
         sku = _sku_str(value)
         if sku not in seen:
             seen.add(sku)
-            skus.append(sku)
+            extra = {name: (row[i] if i < len(row) else None) for name, i in keep_index.items()}
+            result.append((sku, extra))
     wb.close()
-    return skus
+    return result
 
 
 class ResultWriter:
     """Пишет результат в Excel. Если файл уже есть — дописывает и знает, что готово."""
 
-    def __init__(self, path: Path, columns: list[tuple[str, str]]) -> None:
+    def __init__(self, path: Path, columns: list[tuple[str, str]], input_columns: list[str] | None = None) -> None:
         self.path = Path(path)
         self.columns = columns            # (имя поля, заголовок колонки)
+        self.input_columns = list(input_columns or [])   # колонки, перенесённые из входного файла
         self.rows: dict[str, list] = {}   # артикул → строка; порядок вставки сохраняется
         self.done: set[str] = set()
         if self.path.exists():
             self._load()
 
     def _headers(self) -> list[str]:
-        return ["Артикул", *[title for _, title in self.columns], "Статус", "Ссылка", "Проверено"]
+        return ["Артикул", *self.input_columns, *[title for _, title in self.columns], "Статус", "Ссылка", "Проверено"]
 
     def _load(self) -> None:
         ws = load_workbook(self.path).active
-        status_index = len(self.columns) + 1
+        status_index = 1 + len(self.input_columns) + len(self.columns)
         for row in ws.iter_rows(min_row=2, values_only=True):
             if not row or row[0] is None:
                 continue
@@ -81,8 +94,8 @@ class ResultWriter:
             if row[status_index] in FINAL_STATUSES:
                 self.done.add(sku)
 
-    def add(self, sku: str, values: dict, status: str, url: str) -> None:
-        row = [sku]
+    def add(self, sku: str, values: dict, status: str, url: str, extra: dict | None = None) -> None:
+        row = [sku, *[(extra or {}).get(name) for name in self.input_columns]]
         for name, _ in self.columns:
             value = values.get(name)
             # Decimal в Excel пишем числом, чтобы с ним можно было считать

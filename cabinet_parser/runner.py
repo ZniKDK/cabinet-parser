@@ -10,7 +10,7 @@ from playwright.sync_api import Error as PlaywrightError
 
 from cabinet_parser.browser import CabinetBrowser, SessionExpired
 from cabinet_parser.config import SiteConfig
-from cabinet_parser.excel_io import ResultWriter, read_skus
+from cabinet_parser.excel_io import ResultWriter, read_rows
 
 log = logging.getLogger(__name__)
 
@@ -37,8 +37,10 @@ def run(cfg: SiteConfig, input_path: Path, output_path: Path, state_path: Path,
 
     progress — необязательная функция (номер, всего, артикул, статус) для вывода хода работы.
     """
-    skus = read_skus(input_path, cfg.input_column, cfg.input_sheet)
-    writer = ResultWriter(output_path, [(f.name, f.title) for f in cfg.fields])
+    rows = read_rows(input_path, cfg.input_column, cfg.input_sheet, keep=list(cfg.input_keep))
+    extras = dict(rows)
+    skus = [sku for sku, _ in rows]
+    writer = ResultWriter(output_path, [(f.name, f.title) for f in cfg.fields], input_columns=list(cfg.input_keep))
     report = RunReport(total=len(skus))
     todo = [sku for sku in skus if sku not in writer.done]
     report.skipped = len(skus) - len(todo)
@@ -51,7 +53,7 @@ def run(cfg: SiteConfig, input_path: Path, output_path: Path, state_path: Path,
         try:
             for number, sku in enumerate(todo, 1):
                 status, url, values = _scrape_with_retries(browser, cfg, sku, username, password, errors_dir)
-                writer.add(sku, values, status, url)
+                writer.add(sku, values, status, url, extra=extras.get(sku))
                 if status == "ok":
                     report.ok += 1
                 elif status == "не найден":

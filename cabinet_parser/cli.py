@@ -4,13 +4,15 @@ import argparse
 import logging
 import os
 import sys
+import time
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from dotenv import load_dotenv
 from openpyxl import Workbook
 
 from cabinet_parser.browser import CabinetBrowser, LoginError
-from cabinet_parser.config import ConfigError, load_config
+from cabinet_parser.config import ConfigError, load_config, parse_interval
 from cabinet_parser.excel_io import ExcelError
 from cabinet_parser.runner import run
 
@@ -35,14 +37,36 @@ def _print_report(report, output: Path) -> None:
               "Повторный запуск доберёт только недостающие артикулы.")
 
 
+def rotate_previous(output: Path) -> Path | None:
+    """Перед плановым запуском прошлый результат становится «…_prev.xlsx», новый собирается заново."""
+    if not output.exists():
+        return None
+    previous = output.with_name(f"{output.stem}_prev{output.suffix}")
+    output.replace(previous)
+    return previous
+
+
 def cmd_run(args) -> int:
     cfg = load_config(args.site)
     load_dotenv(Path(".env"))
-    report = run(cfg, args.input, args.output, _session_path(args.site),
-                 os.getenv("CABINET_LOGIN", ""), os.getenv("CABINET_PASSWORD", ""),
-                 headless=not args.headed, progress=_print_progress)
-    _print_report(report, args.output)
-    return 0
+    interval = parse_interval(args.every) if args.every else (cfg.schedule_sec if args.scheduled else None)
+
+    def once() -> None:
+        report = run(cfg, args.input, args.output, _session_path(args.site),
+                     os.getenv("CABINET_LOGIN", ""), os.getenv("CABINET_PASSWORD", ""),
+                     headless=not args.headed, progress=_print_progress)
+        _print_report(report, args.output)
+
+    if interval is None:
+        once()
+        return 0
+    # Режим по расписанию: окно можно свернуть, работает до Ctrl+C
+    while True:
+        rotate_previous(args.output)
+        once()
+        next_at = datetime.now() + timedelta(seconds=interval)
+        print(f"Следующий запуск: {next_at:%d.%m %H:%M}", flush=True)
+        time.sleep(interval)
 
 
 def cmd_login(args) -> int:
@@ -89,6 +113,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--input", type=Path, required=True, help="Excel с артикулами")
     p_run.add_argument("--output", type=Path, required=True, help="куда записать результат")
     p_run.add_argument("--headed", action="store_true", help="показывать окно браузера")
+    p_run.add_argument("--every", help="повторять по расписанию: 30m, 6h, 1d")
+    p_run.add_argument("--scheduled", action="store_true", help="повторять с интервалом schedule из YAML")
     p_run.set_defaults(func=cmd_run)
 
     p_login = commands.add_parser("login", help="войти вручную (капча, код из SMS)")
