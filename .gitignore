@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+.pytest_cache/
+
+# Секреты, сессии входа и результаты
+.env
+data/

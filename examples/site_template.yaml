@@ -1,0 +1,46 @@
+# Шаблон описания сайта. Скопируйте, переименуйте (например, supplier.yaml) и заполните селекторы.
+# Селекторы — обычные CSS: в браузере правой кнопкой по элементу → «Просмотреть код» → «Copy selector».
+
+base_url: https://example.ru
+
+# Уберите раздел login целиком, если цены видны без входа
+login:
+  url: /login                       # страница входа
+  username: "input[name=login]"     # поле логина или телефона
+  password: "input[type=password]"  # поле пароля
+  submit: "button[type=submit]"     # кнопка «Войти»
+  logged_in: ".header-user-menu"    # что видно только после входа (меню профиля, «Выйти»)
+
+search:
+  url: /search/?q={sku}             # адрес поиска, {sku} заменится артикулом
+  first_result: ".product-card a"   # ссылка на первый товар в выдаче; уберите, если поиск сразу открывает товар
+  not_found: ".search-empty"        # блок «ничего не найдено»
+
+fields:
+  name:
+    selector: "h1"
+    title: Название
+  price:
+    selector: ".product-price"
+    title: Цена, ₽
+    type: money       # text | money | int
+    wait: true        # true — если цена появляется не сразу (подгружается скриптом)
+  stock:
+    selector: ".availability"
+    title: Наличие
+  qty:
+    selector: ".availability"
+    title: Количество
+    type: int
+    regex: "(\\d+)\\s*шт"   # вырезать число перед «шт»
+  delivery:
+    selector: ".delivery-date"
+    title: Доставка
+
+input:
+  column: Артикул     # заголовок колонки с артикулами во входном Excel
+  # sheet: Прайс      # лист, если не первый
+
+delay_sec: 2          # пауза между товарами: чем больше, тем меньше риск блокировки
+timeout_sec: 20
+retries: 2

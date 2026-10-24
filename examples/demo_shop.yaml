@@ -1,0 +1,46 @@
+# Описание демо-магазина (demo_shop/server.py). По этому образцу пишется описание любого сайта.
+base_url: http://127.0.0.1:8765
+
+# Вход в кабинет. Логин и пароль — в .env (CABINET_LOGIN, CABINET_PASSWORD), не здесь.
+login:
+  url: /login
+  username: "#login"
+  password: "#password"
+  submit: "#submit"
+  logged_in: "a.logout"      # этот элемент есть только у вошедшего пользователя
+
+# Поиск по артикулу
+search:
+  url: /search?q={sku}
+  first_result: "a.product-link"   # открыть первый товар из выдачи
+  not_found: ".empty"              # блок «ничего не найдено»
+
+# Что собрать со страницы товара
+fields:
+  name:
+    selector: "h1.title"
+    title: Название
+  price:
+    selector: ".price"
+    title: Цена в кабинете, ₽
+    type: money
+    wait: true               # цену дорисовывает скрипт — ждём
+  stock:
+    selector: ".stock"
+    title: Наличие
+    wait: true
+  qty:
+    selector: ".qty"
+    title: Количество
+    type: int
+  delivery:
+    selector: ".delivery"
+    title: Срок доставки
+
+# Где во входном Excel артикулы
+input:
+  column: Артикул
+
+delay_sec: 1        # пауза между товарами, секунд (не меньше 0.5)
+timeout_sec: 15     # сколько ждать загрузки страницы и полей
+retries: 2          # повторы при ошибке
